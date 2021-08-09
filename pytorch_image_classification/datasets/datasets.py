@@ -1,10 +1,13 @@
 from typing import Tuple, Union
 
 import pathlib
-
+import os
 import torch
 import torchvision
 import yacs.config
+from PIL import Image
+import numpy as np
+import json
 
 from torch.utils.data import Dataset
 
@@ -24,6 +27,28 @@ class SubsetDataset(Dataset):
 
     def __len__(self):
         return len(self.subset_dataset)
+
+
+class CustomDataset(Dataset):
+    def __init__(self, dataset_dir, transform=None):
+        self.dataset_dir = dataset_dir
+        self.transform = transform
+        self.im_ids = []
+        filelist = os.listdir(os.path.join(dataset_dir, 'img'))
+        for sample in filelist:
+            if '.jpg' in sample or '.png' in filelist:
+                self.im_ids.append(sample)
+            
+    def __getitem__(self, index):
+        sample_name = self.im_ids[index]
+        img = Image.open(os.path.join(self.dataset_dir, 'img', self.im_ids[index])).convert('RGB')
+        json_path = os.path.join(self.dataset_dir, 'label', self.im_ids[index]+'.json')
+        label = int(json.load(open(json_path, 'r'))['step_1']['result'][0]['filterLabel'])
+        if self.transform:
+            img = self.transform(img)
+        return img, label
+    def __len__(self):
+        return len(self.im_ids)
 
 
 def create_dataset(config: yacs.config.CfgNode,
@@ -83,5 +108,20 @@ def create_dataset(config: yacs.config.CfgNode,
         val_dataset = torchvision.datasets.ImageFolder(dataset_dir / 'val',
                                                        transform=val_transform)
         return train_dataset, val_dataset
+    elif config.dataset.name == 'sensebee':
+        dataset_dir = config.dataset.dataset_dir
+        dataset = CustomDataset(dataset_dir)
+        val_ratio = config.train.val_ratio
+        assert val_ratio < 1
+        val_num = int(len(dataset) * val_ratio)
+        train_num = len(dataset) - val_num
+        lengths = [train_num, val_num]
+        train_subset, val_subset = torch.utils.data.dataset.random_split(
+            dataset, lengths)
+        train_transform = create_transform(config, is_train=True)
+        val_transform = create_transform(config, is_train=False)
+        train_dataset = SubsetDataset(train_subset, train_transform)
+        val_dataset = SubsetDataset(val_subset, val_transform)
+        return train_dataset, val_dataset       
     else:
         raise ValueError()

@@ -176,7 +176,7 @@ def train(epoch, config, model, optimizer, scheduler, loss_func, train_loader,
                                       outputs,
                                       targets,
                                       augmentation=True,
-                                      topk=(1, 5))
+                                      topk=(1, 2))
 
         loss = sum(losses)
         if config.train.distributed:
@@ -275,7 +275,7 @@ def validate(epoch, config, model, loss_func, val_loader, logger,
                                           outputs,
                                           targets,
                                           augmentation=False,
-                                          topk=(1, 5))
+                                          topk=(1, 2))
 
             if config.train.distributed:
                 loss_all_reduce = dist.all_reduce(loss,
